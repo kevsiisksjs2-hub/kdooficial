@@ -1,0 +1,7 @@
+{
+  "name": "KDO - Kart Disciplina Oficial (COPIA)",
+  "description": "Plataforma de gestión oficial para Karting. Administración completa de pilotos, reglamentos PDF y campeonatos.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
