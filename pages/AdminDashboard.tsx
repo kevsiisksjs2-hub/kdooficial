@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { storageService } from '../services/storageService';
 import { aiService } from '../services/aiService';
 import { 
-  Pilot, AuditLog, Status, AdminUser, UserRole, Regulation, RegulationCategory, Championship, PressRelease, ChampionshipEvent, Penalty
+  Pilot, AuditLog, Status, AdminUser, UserRole, Regulation, RegulationCategory, Championship, PressRelease, ChampionshipEvent, Penalty, PenaltyType
 } from '../types';
 import { 
   Users, Settings, History, LogOut, Trash2, Search, Plus, XCircle, 
@@ -12,7 +12,7 @@ import {
   ShieldCheck, Activity, Terminal, Key, ShieldAlert, CheckCircle, Database, Sparkles,
   Trophy, Newspaper, FileUp, Download, Briefcase, Edit3, UserCheck, Trash, CheckSquare, Square, Calendar, ListChecks, FileDown,
   Cpu, Zap, ChevronRight, LayoutDashboard, Fingerprint, ExternalLink, Loader2, Flag, Upload, User, Shield, Megaphone, PlusCircle, Globe, FileStack, Clock,
-  Wifi, Signal, Timer, ChevronLeft, AlertTriangle, AlertCircle, XOctagon, MoveDown
+  Wifi, Signal, Timer, ChevronLeft, AlertTriangle, AlertCircle, XOctagon, MoveDown, MapPin, Table
 } from 'lucide-react';
 import { 
   generatePilotCredential, 
@@ -60,6 +60,8 @@ const AdminDashboard = () => {
 
   // Results Tab State
   const [resultsSubTab, setResultsSubTab] = useState<'export' | 'penalties'>('export');
+  const [showPenaltyModal, setShowPenaltyModal] = useState(false);
+  const [penaltyForm, setPenaltyForm] = useState<Partial<Penalty>>({ pilotName: '', number: '', category: 'KDO Power', type: 'Sanción', reason: '', date: new Date().toLocaleDateString() });
 
   // Modals State
   const [showRegModal, setShowRegModal] = useState(false);
@@ -76,6 +78,9 @@ const AdminDashboard = () => {
   const [histForm, setHistForm] = useState<Partial<Championship>>({ name: '', year: 2026, champions: [] });
   const [newWinner, setNewWinner] = useState({ category: '', pilot: '', kart: '' });
 
+  const [showChampModal, setShowChampModal] = useState(false);
+  const [champForm, setChampForm] = useState<Partial<Championship>>({ name: '', status: 'En curso', dates: '', tracks: '', year: 2026 });
+
   const [showImportRankingModal, setShowImportRankingModal] = useState(false);
   const [rawRankingText, setRawRankingText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
@@ -86,11 +91,15 @@ const AdminDashboard = () => {
 
   // Monitor Live State
   const [monitorAntennas, setMonitorAntennas] = useState({ s1: false, s2: false, finish: false });
+  const [liveTimingHits, setLiveTimingHits] = useState<{ id: string, kart: string, pilot: string, sector: string, time: string, timestamp: number }[]>([]);
 
   useEffect(() => {
     const auth = storageService.getAuth();
     if (!auth) { navigate('/AdminKDO'); return; }
     setCurrentUser(auth);
+    if (auth.role === 'Cronomax') {
+      setActiveTab('monitor');
+    }
     refreshData();
   }, [navigate]);
 
@@ -98,20 +107,41 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (activeTab === 'monitor') {
         const interval = setInterval(() => {
-            setMonitorAntennas({
-                s1: Math.random() > 0.3,
-                s2: Math.random() > 0.3,
-                finish: Math.random() > 0.1
-            });
-        }, 800);
+            const hitAntenna = Math.random();
+            let sector = '';
+            let s1Val = false, s2Val = false, finishVal = false;
+
+            if (hitAntenna > 0.9) {
+                sector = 'FINISH';
+                finishVal = true;
+            } else if (hitAntenna > 0.8) {
+                sector = 'S2';
+                s2Val = true;
+            } else if (hitAntenna > 0.7) {
+                sector = 'S1';
+                s1Val = true;
+            }
+
+            setMonitorAntennas({ s1: s1Val, s2: s2Val, finish: finishVal });
+
+            if (sector) {
+                const randomPilot = pilots[Math.floor(Math.random() * pilots.length)];
+                if (randomPilot) {
+                    const newHit = {
+                        id: Math.random().toString(36).substr(2, 9),
+                        kart: `#${randomPilot.number}`,
+                        pilot: randomPilot.name,
+                        sector: sector,
+                        time: (Math.random() * 5 + 10).toFixed(3),
+                        timestamp: Date.now()
+                    };
+                    setLiveTimingHits(prev => [newHit, ...prev].slice(0, 15));
+                }
+            }
+        }, 1000);
         return () => clearInterval(interval);
     }
-  }, [activeTab]);
-
-  // Reset pagination when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, catFilter]);
+  }, [activeTab, pilots]);
 
   const refreshData = () => {
     const loadedPilots = storageService.getPilots();
@@ -162,6 +192,38 @@ const AdminDashboard = () => {
     }
     generateRegisteredPilotsPDF(filtered, catFilter);
     storageService.addLog('PADRON', `Descargado listado de pilotos: ${catFilter}`);
+  };
+
+  const handleExportPenaltiesCSV = () => {
+    const filtered = penalties.filter(p => resCatFilter === 'Todas' || p.category === resCatFilter);
+    if (filtered.length === 0) {
+      alert("No hay penalizaciones para exportar con el filtro actual.");
+      return;
+    }
+
+    const csvContent = [
+      ["PILOTO", "KART", "CATEGORIA", "TIPO", "MOTIVO", "FECHA"],
+      ...filtered.map(p => [
+        `"${p.pilotName || 'DESCONOCIDO'}"`,
+        p.number || 'N/A',
+        p.category,
+        p.type,
+        `"${p.reason}"`,
+        p.date
+      ])
+    ]
+    .map(e => e.join(","))
+    .join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `KDO_Penalizaciones_${resCatFilter}_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    storageService.addLog('ADMIN', `Exportado CSV Penalizaciones: ${resCatFilter}`);
   };
 
   // --- EVENT MANAGEMENT ---
@@ -217,6 +279,87 @@ const AdminDashboard = () => {
       storageService.saveChampionships(updatedChamps);
       setChampionships(updatedChamps);
       storageService.addLog('EVENTO', `Eliminado evento ID: ${eventId}`);
+  };
+
+  // --- PENALTY MANAGEMENT ---
+  const savePenalty = () => {
+    if (!penaltyForm.pilotName || !penaltyForm.number || !penaltyForm.category || !penaltyForm.reason) {
+        alert("Todos los campos obligatorios deben estar completos.");
+        return;
+    }
+
+    const newPenalty: Penalty = {
+        id: penaltyForm.id || Math.random().toString(36).substr(2, 9),
+        pilotId: 'manual', // Denormalized for flexibility
+        pilotName: penaltyForm.pilotName,
+        number: penaltyForm.number,
+        category: penaltyForm.category!,
+        type: penaltyForm.type as PenaltyType,
+        reason: penaltyForm.reason,
+        date: penaltyForm.date || new Date().toLocaleDateString(),
+        points: penaltyForm.points
+    };
+
+    const updatedPenalties = penaltyForm.id 
+        ? penalties.map(p => p.id === penaltyForm.id ? newPenalty : p)
+        : [newPenalty, ...penalties];
+
+    storageService.savePenalties(updatedPenalties);
+    setPenalties(updatedPenalties);
+    setShowPenaltyModal(false);
+    setPenaltyForm({ pilotName: '', number: '', category: 'KDO Power', type: 'Sanción', reason: '', date: new Date().toLocaleDateString() });
+    storageService.addLog('SANCION', `${penaltyForm.id ? 'Editada' : 'Creada'} sanción para ${newPenalty.pilotName}`);
+  };
+
+  const deletePenalty = (id: string) => {
+      if (!confirm("¿Seguro que desea eliminar esta sanción?")) return;
+      const updated = penalties.filter(p => p.id !== id);
+      storageService.savePenalties(updated);
+      setPenalties(updated);
+      storageService.addLog('SANCION', `Eliminada sanción ID: ${id}`);
+  };
+
+  const editPenalty = (p: Penalty) => {
+      setPenaltyForm(p);
+      setShowPenaltyModal(true);
+  };
+
+  // --- CHAMPIONSHIP MANAGEMENT ---
+  const saveChampionship = () => {
+    if (!champForm.name || !champForm.dates || !champForm.tracks) {
+      alert("Todos los campos son obligatorios.");
+      return;
+    }
+    const newChamp: Championship = {
+      id: champForm.id || Math.random().toString(36).substr(2, 9),
+      name: champForm.name,
+      status: champForm.status || 'En curso',
+      dates: champForm.dates,
+      tracks: champForm.tracks,
+      year: champForm.year || 2026,
+      image: champForm.image || 'https://images.unsplash.com/photo-1547631618-f29792042761?w=800&auto=format',
+      events: champForm.events || [],
+      champions: champForm.champions || []
+    };
+
+    const updated = champForm.id 
+      ? championships.map(c => c.id === champForm.id ? newChamp : c)
+      : [...championships, newChamp];
+    
+    storageService.saveChampionships(updated);
+    setChampionships(updated);
+    setShowChampModal(false);
+    setChampForm({ name: '', status: 'En curso', dates: '', tracks: '', year: 2026 });
+    storageService.addLog('CAMPEONATO', `${champForm.id ? 'Editado' : 'Creado'} campeonato: ${newChamp.name}`);
+  };
+
+  const deleteChampionship = (id: string) => {
+    if (confirm("¿Seguro que desea eliminar permanentemente este campeonato y todos sus eventos asociados?")) {
+      const updated = championships.filter(c => c.id !== id);
+      storageService.saveChampionships(updated);
+      setChampionships(updated);
+      storageService.addLog('CAMPEONATO', `Eliminado campeonato ID: ${id}`);
+    }
   };
 
   // --- IMPORT RANKING LOGIC ---
@@ -532,14 +675,14 @@ const AdminDashboard = () => {
         
         <nav className="flex-grow p-6 space-y-1 overflow-y-auto custom-scrollbar">
           {[
-            { id: 'padrón', icon: Users, label: 'Padrón Federado' },
-            { id: 'eventos', icon: CheckCircle, label: 'Control de Evento' },
-            { id: 'resultados', icon: ListChecks, label: 'Resultados Oficiales' },
-            { id: 'noticias', icon: Newspaper, label: 'Prensa KDO' },
-            { id: 'historia', icon: Trophy, label: 'Hall of Fame' },
-            { id: 'staff', icon: UserCog, label: 'Cuerpo Técnico' },
-            { id: 'auditoría', icon: Terminal, label: 'Auditoría Logs' },
-          ].map(tab => (
+            { id: 'padrón', icon: Users, label: 'Padrón Federado', roles: ['SuperAdmin', 'Secretario', 'Comisario Deportivo'] },
+            { id: 'eventos', icon: CheckCircle, label: 'Control de Evento', roles: ['SuperAdmin', 'Comisario Deportivo'] },
+            { id: 'resultados', icon: ListChecks, label: 'Resultados Oficiales', roles: ['SuperAdmin', 'Cronomax', 'Comisario Deportivo'] },
+            { id: 'noticias', icon: Newspaper, label: 'Prensa KDO', roles: ['SuperAdmin', 'Prensa'] },
+            { id: 'historia', icon: Trophy, label: 'Hall of Fame', roles: ['SuperAdmin', 'Prensa'] },
+            { id: 'staff', icon: UserCog, label: 'Cuerpo Técnico', roles: ['SuperAdmin'] },
+            { id: 'auditoría', icon: Terminal, label: 'Auditoría Logs', roles: ['SuperAdmin'] },
+          ].filter(tab => !tab.roles || (currentUser && tab.roles.includes(currentUser.role))).map(tab => (
             <button 
               key={tab.id} 
               onClick={() => setActiveTab(tab.id as AdminTab)} 
@@ -556,11 +699,11 @@ const AdminDashboard = () => {
             <h4 className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-4">ADMINISTRACIÓN</h4>
             <div className="space-y-1">
                 {[
-                    { id: 'campeonatos', icon: Trophy, label: 'Campeonatos' },
-                    { id: 'normativas', icon: FileText, label: 'Reglamentos' },
-                    { id: 'monitor', icon: Activity, label: 'Monitor Live' },
-                    { id: 'ajustes', icon: Settings, label: 'Ajustes' },
-                ].map(tab => (
+                    { id: 'campeonatos', icon: Trophy, label: 'Campeonatos', roles: ['SuperAdmin'] },
+                    { id: 'normativas', icon: FileText, label: 'Reglamentos', roles: ['SuperAdmin', 'Secretario'] },
+                    { id: 'monitor', icon: Activity, label: 'Monitor Live', roles: ['SuperAdmin', 'Cronomax', 'Comisario Deportivo'] },
+                    { id: 'ajustes', icon: Settings, label: 'Ajustes', roles: ['SuperAdmin'] },
+                ].filter(tab => !tab.roles || (currentUser && tab.roles.includes(currentUser.role))).map(tab => (
                     <button 
                     key={tab.id} 
                     onClick={() => setActiveTab(tab.id as AdminTab)} 
@@ -572,6 +715,19 @@ const AdminDashboard = () => {
                 ))}
             </div>
           </div>
+          
+          {currentUser?.role === 'Cronomax' && (
+            <div className="pt-6 mt-6 border-t border-white/5 px-6">
+              <h4 className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-4">OPERACIONES</h4>
+              <button 
+                onClick={() => navigate('/cronomax')} 
+                className="w-full flex items-center gap-4 px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-red-600/10 text-zinc-500 hover:text-red-500 border border-dashed border-zinc-800"
+              >
+                <Zap size={16} className="text-red-500" /> 
+                Torre de Control
+              </button>
+            </div>
+          )}
         </nav>
 
         <div className="p-8 border-t border-white/5">
@@ -838,11 +994,17 @@ const AdminDashboard = () => {
                            </div>
                         </div>
                         <div className="flex items-center gap-4">
-                           <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Filtrar por Categoría:</span>
+                           <button onClick={() => { setPenaltyForm({ pilotName: '', number: '', category: 'KDO Power', type: 'Sanción', reason: '', date: new Date().toLocaleDateString() }); setShowPenaltyModal(true); }} className="bg-red-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all flex items-center gap-2 shadow-lg">
+                              <Plus size={14} /> Nueva Sanción
+                           </button>
+                           <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest border-l border-white/10 pl-4">Filtrar:</span>
                            <select value={resCatFilter} onChange={e => setResCatFilter(e.target.value)} className="bg-black border border-white/10 rounded-xl px-4 py-2 text-white text-[10px] font-black uppercase outline-none focus:border-red-600 cursor-pointer">
                               <option value="Todas">Todas las Categorías</option>
                               {officialCats.map(c => <option key={c} value={c}>{c}</option>)}
                            </select>
+                           <button onClick={handleExportPenaltiesCSV} className="bg-zinc-800 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all flex items-center gap-2">
+                              <Table size={14} /> CSV
+                           </button>
                         </div>
                      </div>
 
@@ -855,7 +1017,8 @@ const AdminDashboard = () => {
                                  <th className="px-8 py-5">Categoría</th>
                                  <th className="px-8 py-5">Tipo Sanción</th>
                                  <th className="px-8 py-5">Motivo</th>
-                                 <th className="px-8 py-5 text-right pr-8">Fecha</th>
+                                 <th className="px-8 py-5 text-right">Fecha</th>
+                                 <th className="px-8 py-5 text-right pr-8">Acciones</th>
                               </tr>
                            </thead>
                            <tbody className="divide-y divide-white/[0.03]">
@@ -886,14 +1049,20 @@ const AdminDashboard = () => {
                                     <td className="px-8 py-6">
                                        <span className="text-[9px] font-bold text-zinc-400 uppercase leading-tight line-clamp-1">{p.reason}</span>
                                     </td>
-                                    <td className="px-8 py-6 text-right pr-8 tabular-nums text-[9px] font-bold text-zinc-600">
+                                    <td className="px-8 py-6 text-right tabular-nums text-[9px] font-bold text-zinc-600">
                                        {p.date}
+                                    </td>
+                                    <td className="px-8 py-6 text-right pr-8">
+                                       <div className="flex justify-end gap-2">
+                                          <button onClick={() => editPenalty(p)} className="p-2 bg-zinc-900 rounded text-zinc-500 hover:text-white transition-colors"><Edit3 size={14}/></button>
+                                          <button onClick={() => deletePenalty(p.id)} className="p-2 bg-zinc-900 rounded text-red-500 hover:bg-red-600 hover:text-white transition-colors"><Trash2 size={14}/></button>
+                                       </div>
                                     </td>
                                  </tr>
                               ))}
                               {penalties.filter(p => resCatFilter === 'Todas' || p.category === resCatFilter).length === 0 && (
                                  <tr>
-                                    <td colSpan={6} className="py-20 text-center">
+                                    <td colSpan={7} className="py-20 text-center">
                                        <Shield size={32} className="text-zinc-800 mx-auto mb-4" />
                                        <p className="text-zinc-700 font-black uppercase text-[9px] tracking-widest">No hay sanciones registradas para este filtro</p>
                                     </td>
@@ -911,7 +1080,6 @@ const AdminDashboard = () => {
           {activeTab === 'eventos' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* ... selectors ... */}
                   <div className="lg:col-span-4 glass-panel p-8 rounded-[2.5rem] flex flex-col gap-3 group">
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2 group-hover:text-blue-500 transition-colors">Campeonato Activo</label>
                     <select value={selectedChampionshipId} onChange={e => {setSelectedChampionshipId(e.target.value); setSelectedEventId('');}} className="bg-transparent border-none text-white font-black oswald text-2xl uppercase outline-none cursor-pointer">
@@ -956,6 +1124,7 @@ const AdminDashboard = () => {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className={`text-[8px] px-2 py-1 rounded font-black uppercase ${ev.status === 'Finalizada' ? 'bg-zinc-800 text-zinc-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{ev.status}</span>
+                                    <button onClick={() => { setEventForm(ev); setShowEventModal(true); }} className="text-zinc-500 hover:text-white p-2"><Edit3 size={14}/></button>
                                     <button onClick={() => deleteEvent(ev.id)} className="text-red-500 hover:text-white p-2"><Trash2 size={14}/></button>
                                 </div>
                             </div>
@@ -983,7 +1152,7 @@ const AdminDashboard = () => {
                     <div key={reg.id} className="bg-zinc-900 border border-white/5 p-10 rounded-[3.5rem] relative group hover:border-blue-600 transition-all flex flex-col justify-between h-full shadow-2xl">
                        <div className="relative z-10">
                           <div className="flex justify-between items-center mb-8">
-                             <span className="bg-blue-600/10 text-blue-500 text-[9px] font-black uppercase px-4 py-1.5 rounded-xl border border-blue-600/20">{reg.category}</span>
+                             <span className="bg-blue-600/10 text-blue-500 text-[8px] font-black uppercase px-4 py-1.5 rounded-xl border border-blue-600/20">{reg.category}</span>
                              <span className="text-[11px] font-black text-zinc-600 oswald italic">v{reg.version}</span>
                           </div>
                           <h4 className="text-2xl font-black text-white oswald uppercase italic mb-4 leading-tight group-hover:text-blue-500 transition-colors">{reg.title}</h4>
@@ -1040,11 +1209,11 @@ const AdminDashboard = () => {
                 <div className="flex justify-between items-center mb-8">
                    <h3 className="text-3xl font-black oswald uppercase text-white italic">Hall of Fame Legacy</h3>
                    <button onClick={() => { setHistForm({ name: '', year: 2026, champions: [] }); setShowHistModal(true); }} className="bg-blue-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
-                      + Agregar Campeonato
+                      + Agregar Temporada Pasada
                    </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                   {championships.map(c => (
+                   {championships.filter(c => c.status === 'Finalizada').map(c => (
                       <div key={c.id} className="bg-zinc-900 border border-white/5 p-8 rounded-[2.5rem] relative overflow-hidden group">
                          <div className="absolute top-0 right-0 p-6 opacity-5"><Trophy size={100} /></div>
                          <h4 className="text-2xl font-black oswald uppercase text-white italic mb-2">{c.name}</h4>
@@ -1186,10 +1355,36 @@ const AdminDashboard = () => {
           {/* TAB: MONITOR */}
           {activeTab === 'monitor' && (
               <div className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  {/* Configuración de Tiempos en Vivo */}
+                  <div className="glass-panel p-8 rounded-[3rem] border-blue-600/20 bg-blue-600/5">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                      <div className="flex items-center gap-4">
+                        <div className="bg-blue-600 p-3 rounded-xl"><Wifi size={24} className="text-white" /></div>
+                        <div>
+                          <h3 className="text-lg font-black oswald uppercase text-white italic">Configuración Live Timing</h3>
+                          <p className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.3em]">Enlace externo para visualización de tiempos</p>
+                        </div>
+                      </div>
+                      <div className="flex-grow max-w-md w-full flex gap-3">
+                        <input 
+                          type="text" 
+                          value={settings.liveTimingUrl} 
+                          onChange={(e) => handleUpdateSettings({ liveTimingUrl: e.target.value })}
+                          placeholder="https://speedhive.mylaps.com/..." 
+                          className="flex-grow bg-black border border-white/10 rounded-xl px-6 py-3 text-white text-xs font-bold outline-none focus:border-blue-600"
+                        />
+                        <div className="bg-emerald-600/10 border border-emerald-500/20 px-4 py-3 rounded-xl flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                          <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Active</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="glass-panel p-10 rounded-[3rem] border border-white/5 bg-black/40 relative overflow-hidden">
                       <div className="absolute top-0 right-0 p-10 opacity-5"><Activity size={200} className="text-emerald-500" /></div>
                       <h3 className="text-3xl font-black oswald uppercase text-white italic tracking-tighter mb-10 flex items-center gap-4">
-                          <Wifi className="text-emerald-500 animate-pulse" /> Monitor de Telemetría
+                          <Wifi className="text-emerald-500 animate-pulse" /> Monitor de Telemetría Live
                       </h3>
                       
                       <div className="grid grid-cols-3 gap-8 mb-12">
@@ -1207,6 +1402,50 @@ const AdminDashboard = () => {
                               );
                           })}
                       </div>
+
+                      <div className="bg-black/60 rounded-[2rem] border border-white/5 overflow-hidden">
+                         <div className="p-6 bg-zinc-900/50 border-b border-white/5 flex justify-between items-center">
+                            <h4 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Real-Time Data Feed (Simulated)</h4>
+                            <div className="flex items-center gap-2">
+                               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                               <span className="text-[8px] font-black uppercase text-emerald-500">Live Engine Active</span>
+                            </div>
+                         </div>
+                         <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                               <thead className="bg-black text-[8px] font-black uppercase text-zinc-700">
+                                  <tr>
+                                     <th className="px-8 py-4">Dorsal</th>
+                                     <th className="px-8 py-4">Piloto</th>
+                                     <th className="px-8 py-4">Sector</th>
+                                     <th className="px-8 py-4">Tiempo Hit</th>
+                                     <th className="px-8 py-4 text-right">Reloj</th>
+                                  </tr>
+                               </thead>
+                               <tbody className="divide-y divide-white/[0.03]">
+                                  {liveTimingHits.map(hit => (
+                                     <tr key={hit.id} className="animate-in slide-in-from-top-1 duration-300">
+                                        <td className="px-8 py-4 text-blue-500 font-black oswald">{hit.kart}</td>
+                                        <td className="px-8 py-4 text-white font-bold uppercase text-[10px]">{hit.pilot}</td>
+                                        <td className="px-8 py-4">
+                                           <span className={`px-2 py-0.5 rounded text-[8px] font-black ${hit.sector === 'FINISH' ? 'bg-white text-black' : 'bg-blue-600/10 text-blue-500 border border-blue-600/20'}`}>{hit.sector}</span>
+                                        </td>
+                                        <td className="px-8 py-4 text-zinc-400 font-mono text-[10px]">{hit.time}s</td>
+                                        <td className="px-8 py-4 text-right text-[9px] text-zinc-600 font-bold">{new Date(hit.timestamp).toLocaleTimeString()}</td>
+                                     </tr>
+                                  ))}
+                                  {liveTimingHits.length === 0 && (
+                                     <tr>
+                                        <td colSpan={5} className="py-20 text-center opacity-30">
+                                           <Activity className="mx-auto mb-4" />
+                                           <p className="text-[10px] font-black uppercase tracking-widest">Esperando señales de transponders...</p>
+                                        </td>
+                                     </tr>
+                                  )}
+                               </tbody>
+                            </table>
+                         </div>
+                      </div>
                   </div>
               </div>
           )}
@@ -1219,18 +1458,28 @@ const AdminDashboard = () => {
                       <h3 className="text-4xl font-black oswald uppercase text-white italic tracking-tighter">Gestión de Torneos</h3>
                       <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mt-2">Creación y edición de temporadas</p>
                     </div>
-                    <button onClick={() => { setHistForm({ name: '', year: 2026, champions: [] }); setShowHistModal(true); }} className="bg-blue-600 text-white px-10 py-5 rounded-[2.5rem] font-black uppercase text-[10px] flex items-center gap-3 shadow-2xl hover:bg-white hover:text-blue-600 transition-all group">
+                    <button onClick={() => { setChampForm({ name: '', status: 'En curso', dates: '', tracks: '', year: 2026 }); setShowChampModal(true); }} className="bg-blue-600 text-white px-10 py-5 rounded-[2.5rem] font-black uppercase text-[10px] flex items-center gap-3 shadow-2xl hover:bg-white hover:text-blue-600 transition-all group">
                       Nuevo Campeonato <Trophy size={20} className="group-hover:-translate-y-1 transition-transform" />
                     </button>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {championships.map(c => (
-                       <div key={c.id} className="bg-zinc-900 border border-white/5 p-8 rounded-[2.5rem] relative group hover:border-blue-600 transition-all">
-                          <h4 className="text-2xl font-black oswald uppercase text-white italic mb-2">{c.name}</h4>
-                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">Temporada {c.year}</p>
-                          <div className="text-[10px] text-zinc-400 font-bold uppercase space-y-1">
-                             <p>Eventos: {c.events?.length || 0}</p>
-                             <p>Circuitos: {c.tracks}</p>
+                       <div key={c.id} className="bg-zinc-900 border border-white/5 p-10 rounded-[2.5rem] relative group hover:border-blue-600 transition-all flex flex-col justify-between h-full shadow-2xl">
+                          <div className="relative z-10">
+                             <div className="flex justify-between items-center mb-6">
+                                <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full border ${c.status === 'En curso' ? 'bg-emerald-600/10 text-emerald-500 border-emerald-500/20' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>{c.status}</span>
+                                <span className="text-[11px] font-black text-zinc-600 oswald italic">{c.year}</span>
+                             </div>
+                             <h4 className="text-2xl font-black oswald uppercase text-white italic mb-4 leading-tight group-hover:text-blue-500 transition-colors">{c.name}</h4>
+                             <div className="text-[10px] text-zinc-500 font-bold uppercase space-y-2 mb-8">
+                                <p className="flex items-center gap-2"><Calendar size={14} className="text-blue-600" /> {c.dates}</p>
+                                <p className="flex items-center gap-2"><MapPin size={14} className="text-blue-600" /> {c.tracks}</p>
+                                <p className="flex items-center gap-2"><LayoutDashboard size={14} className="text-blue-600" /> Eventos: {c.events?.length || 0}</p>
+                             </div>
+                          </div>
+                          <div className="pt-6 border-t border-white/5 flex gap-3">
+                             <button onClick={() => { setChampForm(c); setShowChampModal(true); }} className="flex-grow bg-zinc-950 text-zinc-400 py-3 rounded-xl font-black uppercase text-[9px] hover:text-white hover:bg-zinc-800 transition-all border border-white/5">Editar</button>
+                             <button onClick={() => deleteChampionship(c.id)} className="p-3 bg-red-600/5 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all border border-red-600/10"><Trash2 size={16}/></button>
                           </div>
                        </div>
                     ))}
@@ -1278,6 +1527,92 @@ const AdminDashboard = () => {
                     <input type="text" value={eventForm.track} onChange={e => setEventForm({...eventForm, track: e.target.value})} className="w-full bg-black border border-white/5 rounded-2xl py-4 px-6 text-white font-black uppercase outline-none focus:border-blue-600" placeholder="EJ: KARTÓDROMO CHIVILCOY" />
                  </div>
                  <button onClick={saveEvent} className="w-full bg-blue-600 hover:bg-white text-white hover:text-black font-black uppercase py-6 rounded-3xl shadow-2xl transition-all oswald italic text-lg">Guardar Evento</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* PENALTY MODAL */}
+      {showPenaltyModal && (
+        <div className="fixed inset-0 z-[400] bg-black/98 backdrop-blur-3xl flex items-center justify-center p-6">
+           <div className="bg-zinc-900 border border-white/10 w-full max-w-xl p-14 rounded-[4rem] shadow-2xl relative animate-in zoom-in-95">
+              <button onClick={() => setShowPenaltyModal(false)} className="absolute top-10 right-10 text-zinc-500 hover:text-white bg-zinc-950 p-2 rounded-full transition-all"><XCircle size={32} /></button>
+              <div className="flex items-center gap-5 mb-10">
+                 <div className="bg-red-600 p-4 rounded-3xl"><AlertTriangle size={28} className="text-white" /></div>
+                 <h2 className="text-4xl font-black oswald uppercase text-white italic tracking-tighter">Gestor <span className="text-red-500">Sanciones</span></h2>
+              </div>
+              <div className="space-y-6">
+                 <div>
+                    <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Nombre Piloto</label>
+                    <input type="text" value={penaltyForm.pilotName} onChange={e => setPenaltyForm({...penaltyForm, pilotName: e.target.value})} className="w-full bg-black border border-white/5 rounded-2xl py-4 px-6 text-white font-black uppercase outline-none focus:border-red-600" placeholder="NOMBRE COMPLETO" />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Kart N°</label>
+                        <input type="text" value={penaltyForm.number} onChange={e => setPenaltyForm({...penaltyForm, number: e.target.value})} className="w-full bg-black border border-white/5 rounded-2xl py-4 px-6 text-white font-black uppercase outline-none focus:border-red-600" placeholder="00" />
+                     </div>
+                     <div>
+                        <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Categoría</label>
+                        <select value={penaltyForm.category} onChange={e => setPenaltyForm({...penaltyForm, category: e.target.value})} className="w-full bg-black border border-white/5 rounded-2xl py-4 px-6 text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer">
+                           {storageService.getCategories().map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                     </div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                       <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Tipo Sanción</label>
+                       <select value={penaltyForm.type} onChange={e => setPenaltyForm({...penaltyForm, type: e.target.value as any})} className="w-full bg-black border border-white/5 rounded-2xl py-4 px-6 text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer">
+                          {['Exclusión', 'Recargo 5s', 'Recargo 10s', 'Recargo Puesto', 'Sanción'].map(t => <option key={t} value={t}>{t}</option>)}
+                       </select>
+                    </div>
+                    <div>
+                       <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Fecha</label>
+                       <input type="text" value={penaltyForm.date} onChange={e => setPenaltyForm({...penaltyForm, date: e.target.value})} className="w-full bg-black border border-white/5 rounded-2xl py-4 px-6 text-white font-black uppercase outline-none focus:border-red-600" placeholder="DD/MM/AAAA" />
+                    </div>
+                 </div>
+                 <div>
+                    <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Motivo</label>
+                    <textarea value={penaltyForm.reason} onChange={e => setPenaltyForm({...penaltyForm, reason: e.target.value})} className="w-full bg-black border border-white/5 rounded-2xl py-4 px-6 text-white font-bold uppercase outline-none focus:border-red-600 h-24 resize-none" placeholder="DESCRIPCIÓN DE LA FALTA..." />
+                 </div>
+                 <button onClick={savePenalty} className="w-full bg-red-600 hover:bg-white text-white hover:text-black font-black uppercase py-6 rounded-3xl shadow-2xl transition-all oswald italic text-lg">Confirmar Sanción</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* CHAMP MODAL */}
+      {showChampModal && (
+        <div className="fixed inset-0 z-[400] bg-black/98 backdrop-blur-3xl flex items-center justify-center p-6">
+           <div className="bg-zinc-900 border border-white/10 w-full max-w-xl p-14 rounded-[4rem] shadow-2xl relative animate-in zoom-in-95">
+              <button onClick={() => setShowChampModal(false)} className="absolute top-10 right-10 text-zinc-500 hover:text-white transition-colors"><XCircle size={28} /></button>
+              <h2 className="text-3xl font-black oswald uppercase text-white italic mb-6">Nuevo/Editar <span className="text-blue-500">Campeonato</span></h2>
+              <div className="space-y-4">
+                  <div>
+                     <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Nombre del Torneo</label>
+                     <input type="text" value={champForm.name} onChange={e => setChampForm({...champForm, name: e.target.value})} className="w-full bg-black p-4 rounded-xl text-white border border-white/10" placeholder="Campeonato Oficial KDO 2026" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Año</label>
+                        <input type="number" value={champForm.year} onChange={e => setChampForm({...champForm, year: Number(e.target.value)})} className="w-full bg-black p-4 rounded-xl text-white border border-white/10" />
+                     </div>
+                     <div>
+                        <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Estado</label>
+                        <select value={champForm.status} onChange={e => setChampForm({...champForm, status: e.target.value})} className="w-full bg-black p-4 rounded-xl text-white border border-white/10">
+                           <option value="En curso">En curso</option>
+                           <option value="Finalizada">Finalizada</option>
+                        </select>
+                     </div>
+                  </div>
+                  <div>
+                     <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Rango de Fechas</label>
+                     <input type="text" value={champForm.dates} onChange={e => setChampForm({...champForm, dates: e.target.value})} className="w-full bg-black p-4 rounded-xl text-white border border-white/10" placeholder="Marzo - Diciembre" />
+                  </div>
+                  <div>
+                     <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-2 mb-2 block">Circuitos Asociados</label>
+                     <input type="text" value={champForm.tracks} onChange={e => setChampForm({...champForm, tracks: e.target.value})} className="w-full bg-black p-4 rounded-xl text-white border border-white/10" placeholder="Chivilcoy, Salto, Chacabuco" />
+                  </div>
+                  <button onClick={saveChampionship} className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold uppercase hover:bg-white hover:text-black transition-all">Guardar Campeonato</button>
               </div>
            </div>
         </div>

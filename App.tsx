@@ -23,7 +23,7 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const path = location.pathname.toLowerCase();
   
-  const isAdminRoute = path.includes('/adminkdo');
+  const isAdminRoute = path.includes('/adminkdo') || path.includes('/cronomax');
 
   return (
     <div className="min-h-screen flex flex-col bg-transparent">

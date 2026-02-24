@@ -1,5 +1,5 @@
 
-import { Pilot, AuditLog, SystemSettings, TrackFlag, Championship, Circuit, Regulation, AdminUser, PressRelease, Penalty, Status, MarketplaceItem } from '../types';
+import { Pilot, AuditLog, SystemSettings, TrackFlag, Championship, Circuit, Regulation, AdminUser, PressRelease, Penalty, Status, MarketplaceItem, PublishedSession } from '../types';
 import { INITIAL_PILOTS, INITIAL_CATEGORIES, INITIAL_CIRCUITS, INITIAL_CHAMPIONSHIPS } from '../constants';
 
 const KEYS = {
@@ -14,7 +14,8 @@ const KEYS = {
   NEWS: 'kdo_v10_news',
   VOTES: 'kdo_v10_votes',
   PENALTIES: 'kdo_v10_penalties',
-  MARKETPLACE: 'kdo_v10_marketplace'
+  MARKETPLACE: 'kdo_v10_marketplace',
+  SESSIONS: 'kdo_v10_published_sessions'
 };
 
 const defaultAdmins: AdminUser[] = [
@@ -25,6 +26,14 @@ const defaultAdmins: AdminUser[] = [
     name: 'Director General KDO',
     role: 'SuperAdmin',
     permissions: ['READ', 'WRITE', 'ADMIN']
+  },
+  {
+    id: 'admin-cronomax',
+    username: 'cronomax',
+    password: 'kdo_cronomax_2026',
+    name: 'Operador Cronomax',
+    role: 'Cronomax',
+    permissions: ['READ', 'WRITE']
   }
 ];
 
@@ -141,6 +150,17 @@ export const storageService = {
     return data ? JSON.parse(data) : [];
   },
   saveMarketplace: (items: MarketplaceItem[]) => localStorage.setItem(KEYS.MARKETPLACE, JSON.stringify(items)),
+
+  // Sesiones Publicadas (Cronomax -> Resultados)
+  getPublishedSessions: (): PublishedSession[] => {
+    const data = localStorage.getItem(KEYS.SESSIONS);
+    return data ? JSON.parse(data) : [];
+  },
+  savePublishedSession: (session: PublishedSession) => {
+    const sessions = storageService.getPublishedSessions();
+    const updated = [session, ...sessions].slice(0, 20); // Keep last 20 sessions
+    localStorage.setItem(KEYS.SESSIONS, JSON.stringify(updated));
+  },
 
   // Auxiliares
   getCircuits: (): Circuit[] => INITIAL_CIRCUITS,

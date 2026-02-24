@@ -9,10 +9,10 @@ const drawKDOHeader = (doc: jsPDF, title: string, subtitle: string) => {
   doc.setFillColor(0, 0, 0);
   doc.rect(0, 0, pageWidth, 40, 'F');
   
-  doc.setFillColor(250, 204, 21);
+  doc.setFillColor(37, 99, 235);
   doc.rect(0, 38, pageWidth, 2, 'F');
   
-  doc.setTextColor(250, 204, 21);
+  doc.setTextColor(37, 99, 235);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(28);
   doc.text("KDO", 14, 22);
@@ -30,7 +30,7 @@ const drawKDOHeader = (doc: jsPDF, title: string, subtitle: string) => {
   doc.text(subtitle.toUpperCase(), pageWidth - 14, 25, { align: 'right' });
   
   doc.setFontSize(8);
-  doc.setTextColor(250, 204, 21);
+  doc.setTextColor(37, 99, 235);
   doc.text(`EMISIÓN OFICIAL: ${new Date().toLocaleString('es-AR')}`, pageWidth - 14, 33, { align: 'right' });
 };
 
@@ -44,7 +44,7 @@ export const generateInscriptosSimplePDF = (pilots: Pilot[]) => {
     head: [['KART', 'RANKING', 'CATEGORÍA', 'PILOTO']],
     body: pilots.map(p => [`#${p.number}`, p.ranking || '-', p.category, p.name]),
     theme: 'grid',
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
   
   doc.save(`KDO_Inscriptos_Simple_${Date.now()}.pdf`);
@@ -60,7 +60,7 @@ export const generateInscriptosLicenciasPDF = (pilots: Pilot[]) => {
     head: [['KART', 'RANKING', 'CATEGORÍA', 'PILOTO', 'LIC. MÉDICA', 'LIC. DEPORTIVA']],
     body: pilots.map(p => [`#${p.number}`, p.ranking || '-', p.category, p.name, p.medicalLicense, p.sportsLicense]),
     theme: 'grid',
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
   
   doc.save(`KDO_Inscriptos_Licencias_${Date.now()}.pdf`);
@@ -71,7 +71,6 @@ export const generateInscriptosCronologicoPDF = (pilots: Pilot[]) => {
   const doc = new jsPDF();
   drawKDOHeader(doc, "ORDEN DE LLEGADA", "LISTADO CRONOLÓGICO DE REGISTRO");
   
-  // Ordenar por fecha de creación (asumiendo que createdAt es timestamp)
   const sorted = [...pilots].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   
   autoTable(doc, {
@@ -86,7 +85,7 @@ export const generateInscriptosCronologicoPDF = (pilots: Pilot[]) => {
       new Date(p.createdAt || 0).toLocaleString('es-AR')
     ]),
     theme: 'striped',
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
   
   doc.save(`KDO_Orden_Llegada_${Date.now()}.pdf`);
@@ -152,7 +151,6 @@ export const generateGruposPistaPDF = (pilots: Pilot[], categories: string[]) =>
 
     if (catPilots.length === 0) return;
 
-    // Dividir en grupos de máximo 15 pilotos (ejemplo)
     const groupSize = 15;
     for (let i = 0; i < catPilots.length; i += groupSize) {
       const groupNum = Math.floor(i / groupSize) + 1;
@@ -165,7 +163,7 @@ export const generateGruposPistaPDF = (pilots: Pilot[], categories: string[]) =>
       }
 
       doc.setFontSize(11);
-      doc.setTextColor(255, 0, 0);
+      doc.setTextColor(37, 99, 235);
       doc.setFont('helvetica', 'bold');
       doc.text(`${cat.toUpperCase()} - GRUPO ${groupLabel}`, 14, currentY);
       currentY += 5;
@@ -175,7 +173,7 @@ export const generateGruposPistaPDF = (pilots: Pilot[], categories: string[]) =>
         head: [['POS', 'KART', 'PILOTO', 'RANK']],
         body: groupPilots.map((p, idx) => [idx + 1, `#${p.number}`, p.name, p.ranking || '-']),
         theme: 'grid',
-        headStyles: { fillColor: [200, 0, 0], textColor: [255, 255, 255] }
+        headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255] }
       });
 
       currentY = (doc as any).lastAutoTable.finalY + 15;
@@ -190,7 +188,6 @@ export const generateRegisteredPilotsPDF = (pilots: Pilot[], category: string) =
   const doc = new jsPDF();
   drawKDOHeader(doc, "LISTADO DE INSCRIPTOS", `CATEGORÍA: ${category}`);
   
-  // Ordenar por número de kart
   const sortedPilots = [...pilots].sort((a, b) => parseInt(a.number) - parseInt(b.number));
 
   const half = Math.ceil(sortedPilots.length / 2);
@@ -211,7 +208,7 @@ export const generateRegisteredPilotsPDF = (pilots: Pilot[], category: string) =
     body: leftColumn.map((p, i) => formatRow(p, i, 0)),
     theme: 'grid',
     styles: { fontSize: 8, cellPadding: 1.5 },
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
 
   if (rightColumn.length > 0) {
@@ -222,14 +219,12 @@ export const generateRegisteredPilotsPDF = (pilots: Pilot[], category: string) =
       body: rightColumn.map((p, i) => formatRow(p, i, half)),
       theme: 'grid',
       styles: { fontSize: 8, cellPadding: 1.5 },
-      headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+      headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
     });
   }
 
   doc.save(`KDO_Inscriptos_${category.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
 };
-
-// --- MANTENIMIENTO DE FUNCIONES ANTERIORES ---
 
 export const generateBriefingAttendancePDF = (pilots: Pilot[]) => {
   const doc = new jsPDF();
@@ -241,7 +236,7 @@ export const generateBriefingAttendancePDF = (pilots: Pilot[]) => {
     body: pilots.map(p => [`#${p.number}`, p.name, p.category, '_______________________']),
     theme: 'grid',
     styles: { cellPadding: 5, fontSize: 10 },
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
   
   doc.save(`KDO_Briefing_${new Date().toLocaleDateString()}.pdf`);
@@ -253,10 +248,10 @@ export const generatePilotCredential = (pilot: Pilot) => {
   doc.setFillColor(15, 15, 15);
   doc.rect(0, 0, 85, 55, 'F');
   
-  doc.setFillColor(250, 204, 21);
+  doc.setFillColor(37, 99, 235);
   doc.rect(0, 0, 85, 12, 'F');
   
-  doc.setTextColor(0, 0, 0);
+  doc.setTextColor(255, 255, 255);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.text("CREDENCIAL OFICIAL KDO 2026", 42.5, 8, { align: 'center' });
@@ -271,7 +266,7 @@ export const generatePilotCredential = (pilot: Pilot) => {
   doc.setFontSize(11);
   doc.text(pilot.name.toUpperCase(), 35, 22);
   
-  doc.setTextColor(250, 204, 21);
+  doc.setTextColor(37, 99, 235);
   doc.setFontSize(18);
   doc.text(`KART #${pilot.number}`, 35, 32);
   
@@ -281,7 +276,7 @@ export const generatePilotCredential = (pilot: Pilot) => {
   doc.text(`LIC. MÉDICA: ${pilot.medicalLicense}`, 35, 42);
   doc.text(`LIC. DEPORTIVA: ${pilot.sportsLicense}`, 35, 46);
   
-  doc.setFillColor(250, 204, 21);
+  doc.setFillColor(37, 99, 235);
   doc.rect(0, 52, 85, 3, 'F');
   
   doc.save(`KDO_Credencial_${pilot.number}.pdf`);
@@ -295,7 +290,7 @@ export const generatePilotsPDF = (pilots: Pilot[], title: string, category?: Cat
     head: [['ORDEN', 'KART', 'PILOTO', 'CATEGORÍA', 'ESTADO']],
     body: pilots.map((p, i) => [i + 1, `#${p.number}`, p.name, p.category, p.status]),
     theme: 'grid',
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
   doc.save(`KDO_Listado_${Date.now()}.pdf`);
 };
@@ -308,7 +303,7 @@ export const generateChampionshipPDF = (championshipName: string, category: stri
     head: [['POS', 'KART', 'PILOTO', 'VICTORIAS', 'PUNTOS']],
     body: pilots.map((p, i) => [i + 1, `#${p.number}`, p.name, p.stats?.wins || 0, (p.stats?.points || 0).toFixed(1)]),
     theme: 'striped',
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
   doc.save(`KDO_Standings_${category}.pdf`);
 };
@@ -324,30 +319,29 @@ export const generateOfficialResultsPDF = (category: string, pilots: any[], sess
   const formatRow = (p: any, i: number, offset: number) => [
     i + 1 + offset, 
     `#${p.number}`, 
-    p.name.split(' ')[0], 
-    p.diff || '-',
-    p.bestLap || '-'
+    p.name.toUpperCase(), 
+    sessionName.toUpperCase()
   ];
 
   autoTable(doc, {
     startY: 45,
     margin: { right: 107 },
-    head: [['POS', 'KART', 'PILOTO', 'DIF.', 'MEJOR VTA']],
+    head: [['POS', 'KART', 'PILOT', 'OFFICIAL CLASSIFICATION']],
     body: leftColumn.map((p, i) => formatRow(p, i, 0)),
     theme: 'grid',
-    styles: { fontSize: 7, cellPadding: 1.5 },
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    styles: { fontSize: 7, cellPadding: 2 },
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
 
   if (rightColumn.length > 0) {
     autoTable(doc, {
       startY: 45,
       margin: { left: 107 },
-      head: [['POS', 'KART', 'PILOTO', 'DIF.', 'MEJOR VTA']],
+      head: [['POS', 'KART', 'PILOT', 'OFFICIAL CLASSIFICATION']],
       body: rightColumn.map((p, i) => formatRow(p, i, half)),
       theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1.5 },
-      headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
     });
   }
 
@@ -362,12 +356,11 @@ export const generateLiveTimingPDF = (title: string, trackFlag: string, timing: 
     head: [['POS', 'NO', 'PILOTO', 'VLTAS', 'MEJOR']],
     body: timing.map(t => [t.pos, t.no, t.name, t.laps, t.bestLap]),
     theme: 'grid',
-    headStyles: { fillColor: [0, 0, 0], textColor: [250, 204, 21] }
+    headStyles: { fillColor: [0, 0, 0], textColor: [37, 99, 235] }
   });
   doc.save(`KDO_LiveTiming_${Date.now()}.pdf`);
 };
 
-// 6. PDF Vuelta a Vuelta (Lap-by-Lap)
 export const generateLapByLapPDF = (category: string, pilots: Pilot[], eventName: string) => {
   const doc = new jsPDF();
   drawKDOHeader(doc, "ANÁLISIS VUELTA A VUELTA", `${eventName} - ${category}`);
@@ -403,12 +396,10 @@ export const generateLapByLapPDF = (category: string, pilots: Pilot[], eventName
     const leftPilot = pilots[i];
     const rightPilot = pilots[i + 1];
 
-    // Left Column
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
     doc.text(`#${leftPilot.number} ${leftPilot.name}`, margin, currentY);
     
-    // Fake data for visual representation
     const leftLaps = generateMockLaps(48.5, 12);
     
     autoTable(doc, {
@@ -423,7 +414,6 @@ export const generateLapByLapPDF = (category: string, pilots: Pilot[], eventName
     
     const leftHeight = (doc as any).lastAutoTable.finalY;
 
-    // Right Column (if exists)
     if (rightPilot) {
       doc.text(`#${rightPilot.number} ${rightPilot.name}`, margin + colWidth + colGap, currentY);
       const rightLaps = generateMockLaps(48.8, 12);

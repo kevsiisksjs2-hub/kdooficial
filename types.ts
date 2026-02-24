@@ -10,7 +10,7 @@ export enum TrackFlag {
   CUADROS = 'Cuadros'
 }
 
-export type UserRole = 'SuperAdmin' | 'Comisario Deportivo' | 'Escrutador Técnico' | 'Secretario' | 'Prensa';
+export type UserRole = 'SuperAdmin' | 'Comisario Deportivo' | 'Escrutador Técnico' | 'Secretario' | 'Prensa' | 'Cronomax';
 
 export interface AdminUser {
   id: string;
@@ -185,4 +185,24 @@ export interface MarketplaceItem {
   condition: 'Nuevo' | 'Usado';
   image: string;
   contact: string;
+}
+
+export interface PublishedSession {
+  id: string;
+  eventName: string;
+  category: string;
+  date: string;
+  aiSummary?: string;
+  results: {
+    pilotId: string;
+    pilotName: string;
+    number: string;
+    position: number;
+    bestLap: string;
+    totalTime: string;
+    penalty?: {
+      type: PenaltyType;
+      reason: string;
+    };
+  }[];
 }

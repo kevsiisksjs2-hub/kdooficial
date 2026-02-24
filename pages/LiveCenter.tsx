@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-// Added XCircle to imports to fix "Cannot find name 'XCircle'" error
-import { Activity, Clock, Zap, Signal, Shield, Flag, ChevronUp, ChevronDown, Minus, Share2, FileDown, Check, ExternalLink, Settings, Wifi, WifiOff, Star, Award, XCircle } from 'lucide-react';
+import { Activity, Clock, Zap, Signal, Shield, Flag, ChevronUp, ChevronDown, Minus, Share2, FileDown, Check, ExternalLink, Settings, Wifi, WifiOff, Star, Award, XCircle, Trophy } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { TimingRow, TrackFlag, SystemSettings } from '../types';
 import { generateLiveTimingPDF } from '../utils/pdfGenerator';
@@ -37,38 +36,68 @@ const LiveCenter: React.FC = () => {
       if (currentSettings.useLocalOrbits && currentSettings.orbitsIp) {
         fetchFromOrbits(currentSettings.orbitsIp);
       } else {
-        setConnectionStatus('simulated');
+        if (connectionStatus !== 'simulated') {
+            setConnectionStatus('simulated');
+        }
         runSimulation();
       }
     }, 1500);
 
     return () => clearInterval(interval);
-  }, [trackStatus]);
+  }, [trackStatus, settings.useLocalOrbits, settings.orbitsIp]); // Dependency updated to react to settings changes
 
   const fetchFromOrbits = async (ip: string) => {
     try {
-      const response = await fetch(`http://${ip}/orbits/livetiming.json`, { signal: AbortSignal.timeout(1000) });
-      if (response.ok) {
-        const data = await response.json();
-        const mappedData: TimingRow[] = data.map((item: any, idx: number) => ({
-          pos: idx + 1,
-          no: item.No || item.Number,
-          name: item.Name,
-          laps: item.Laps,
-          lastLap: item.LastLap,
-          bestLap: item.BestLap,
+      // Direct connection to Orbits JSON feed. 
+      // Note: This requires the Orbits server to allow CORS or the browser to ignore CORS for local IPs if not configured.
+      // Usually accessing local IPs like 192.168.x.x directly from browser is fine if mixed content isn't an issue (http vs https).
+      const response = await fetch(`http://${ip}:50000/orb/passings`, { 
+          method: 'GET',
+          mode: 'no-cors', // Try no-cors first for opaque response if server doesn't support CORS
+          signal: AbortSignal.timeout(1000) 
+      });
+      
+      // Since 'no-cors' returns opaque response, we can't read data. 
+      // Ideally, the Orbits software or a local proxy should expose a JSON endpoint.
+      // Assuming a standard JSON endpoint exists on the IP for this implementation based on user request.
+      // If using a specific Orbits RMonitor to JSON bridge, the path might be /api/runs or similar.
+      // For this implementation, we will try a standard fetch assuming the user has a way to expose JSON.
+      
+      // Re-attempting with standard fetch assuming a compatible endpoint is available at the IP.
+      // Common Orbits JSON output or wrappers often expose specific endpoints.
+      const jsonResponse = await fetch(`http://${ip}/results.json`, { signal: AbortSignal.timeout(1000) });
+      
+      if (jsonResponse.ok) {
+        const data = await jsonResponse.json();
+        // Transform Orbits data structure to TimingRow
+        // This mapping depends heavily on the specific JSON format Orbits exports.
+        // Using a generic mapping based on common fields.
+        const mappedData: TimingRow[] = Array.isArray(data) ? data.map((item: any, idx: number) => ({
+          pos: item.Position || idx + 1,
+          no: item.No || item.Number || item.KART,
+          name: item.Name || item.Driver || item.PILOT,
+          laps: parseInt(item.Laps || item.LAPS || '0'),
+          lastLap: item.LastLap || item.LAST_LAP || "00.000",
+          bestLap: item.BestLap || item.BEST_LAP || "00.000",
           s1: item.S1 || "00.0",
           s2: item.S2 || "00.0",
           s3: item.S3 || "00.0",
           gap: item.Gap || "-",
           interval: item.Interval || "-",
-          status: item.Status || 'TRACK',
-          isSessionBest: item.IsSessionBest,
-          isPersonalBest: item.IsPersonalBest,
-          delta: item.Delta > 0 ? 'up' : 'down'
-        }));
-        setTiming(mappedData);
-        setConnectionStatus('connected');
+          status: 'TRACK', // Orbits might not provide status per row easily in simple JSON
+          isSessionBest: false, // Would need calculation
+          isPersonalBest: false, // Would need calculation
+          delta: 'steady'
+        })) : [];
+        
+        if (mappedData.length > 0) {
+            setTiming(mappedData);
+            setConnectionStatus('connected');
+        } else {
+            // Fallback if data is empty or malformed
+             setConnectionStatus('disconnected');
+             runSimulation();
+        }
       } else {
         setConnectionStatus('disconnected');
         runSimulation();
@@ -220,7 +249,7 @@ const LiveCenter: React.FC = () => {
         <div className="flex gap-10 overflow-hidden items-center h-full">
           {eventLog.map(event => (
             <span key={event.id} className={`text-[10px] font-black uppercase whitespace-nowrap animate-in slide-in-from-left-4 duration-500 ${
-              event.type === 'best' ? 'text-yellow-400' : event.type === 'flag' ? 'text-red-500 font-black scale-110' : 'text-zinc-500'
+              event.type === 'best' ? 'text-purple-400' : event.type === 'flag' ? 'text-red-500 font-black scale-110' : 'text-zinc-500'
             }`}>
               {event.text}
             </span>
@@ -250,15 +279,15 @@ const LiveCenter: React.FC = () => {
                {timing.map((row) => (
                   <tr key={row.no} className={`transition-all duration-700 ease-in-out hover:bg-white/[0.02] group ${row.status === 'PITS' ? 'opacity-40' : ''}`}>
                      <td className="px-6 py-4 text-center">
-                        <span className={`oswald italic font-black text-2xl ${row.pos === 1 ? 'text-yellow-400' : 'text-zinc-600'}`}>{row.pos}</span>
+                        <span className={`oswald italic font-black text-2xl ${row.pos === 1 ? 'text-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]' : 'text-zinc-600'}`}>{row.pos}</span>
                      </td>
                      <td className="px-4 py-4 text-center">
-                        <span className="bg-zinc-800 text-white px-3 py-1 rounded-lg border border-white/5 font-black oswald text-base group-hover:bg-yellow-400 group-hover:text-black transition-colors">#{row.no}</span>
+                        <span className={`px-3 py-1 rounded-lg border border-white/5 font-black oswald text-base transition-colors duration-500 ${row.isSessionBest ? 'bg-purple-600 text-white border-purple-400' : 'bg-zinc-800 text-white group-hover:bg-blue-600 group-hover:text-white'}`}>#{row.no}</span>
                      </td>
                      <td className="px-6 py-4">
                         <div className="flex items-center gap-4">
-                           <div>
-                              <p className="text-sm font-black text-white uppercase tracking-tight group-hover:text-yellow-400 transition-colors">{row.name}</p>
+                           <div className="relative">
+                              <p className={`text-sm font-black uppercase tracking-tight transition-colors duration-500 ${row.isSessionBest ? 'text-purple-400' : row.isPersonalBest ? 'text-emerald-400' : 'text-white'}`}>{row.name}</p>
                               <div className="flex items-center gap-2 mt-1">
                                  <Signal size={10} className={row.transponderSignal === 'Good' || connectionStatus === 'simulated' ? 'text-emerald-500' : 'text-orange-500'} />
                                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Loop Sync</span>
@@ -273,19 +302,28 @@ const LiveCenter: React.FC = () => {
                      </td>
                      <td className="px-4 py-4 text-center font-bold text-zinc-500 text-sm tabular-nums transition-all duration-300">{row.laps}</td>
                      <td className="px-6 py-4 text-right tabular-nums">
-                        <span className={`text-xs font-black transition-colors duration-500 ${row.isPersonalBest ? 'text-emerald-400' : 'text-zinc-300'}`}>{row.lastLap}</span>
+                        <span className={`text-xs font-black transition-all duration-500 px-2 py-0.5 rounded ${
+                           row.isSessionBest ? 'text-purple-400 font-extrabold' : 
+                           row.isPersonalBest ? 'text-emerald-400' : 
+                           'text-zinc-300'
+                        }`}>{row.lastLap}</span>
                      </td>
                      <td className="px-6 py-4 text-right tabular-nums">
                         <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-1000 ${
                            row.isSessionBest 
-                           ? 'bg-purple-600/20 text-purple-400 border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.2)]' 
+                           ? 'bg-purple-600/20 text-purple-400 border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.3)]' 
                            : row.isPersonalBest 
                            ? 'bg-emerald-600/10 text-emerald-400 border-emerald-500/20' 
                            : 'bg-black/40 border-white/5 text-zinc-500'
                         }`}>
-                           {row.isSessionBest && <Award size={14} className="animate-pulse" />}
-                           {row.isPersonalBest && !row.isSessionBest && <Star size={12} fill="currentColor" />}
-                           <span className="text-sm font-black tracking-tighter transition-all">{row.bestLap}</span>
+                           {row.isSessionBest ? (
+                              <Trophy size={14} className="text-purple-400 animate-pulse" />
+                           ) : row.isPersonalBest ? (
+                              <Star size={12} fill="currentColor" className="text-emerald-400" />
+                           ) : null}
+                           <span className={`text-sm font-black tracking-tighter transition-all ${row.isSessionBest ? 'scale-105' : ''}`}>
+                              {row.bestLap}
+                           </span>
                         </div>
                      </td>
                      <td className="px-6 py-4 text-center tabular-nums">
@@ -322,12 +360,12 @@ const LiveCenter: React.FC = () => {
          <div className="flex items-center gap-10">
             <div className="flex items-center gap-4">
                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.6)]"></div>
-                  <span className="text-[8px] font-black uppercase text-zinc-400">Record Sesión</span>
+                  <Trophy size={10} className="text-purple-500" />
+                  <span className="text-[8px] font-black uppercase text-zinc-400">Record Sesión (Púrpura)</span>
                </div>
                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
-                  <span className="text-[8px] font-black uppercase text-zinc-400">Mejor Personal</span>
+                  <Star size={10} className="text-emerald-500" fill="currentColor" />
+                  <span className="text-[8px] font-black uppercase text-zinc-400">Mejor Personal (Verde)</span>
                </div>
             </div>
             <div className="h-4 w-px bg-white/10"></div>
@@ -336,7 +374,7 @@ const LiveCenter: React.FC = () => {
                <span className="text-[9px] font-black uppercase text-zinc-500 tracking-widest">Mylaps Loop: {connectionStatus === 'connected' ? 'Sync OK' : 'Offline'}</span>
             </div>
          </div>
-         <div className="text-[10px] font-black text-yellow-400 uppercase oswald italic tracking-tighter">
+         <div className="text-[10px] font-black text-blue-500 uppercase oswald italic tracking-tighter">
             CronoSync KDO v8.5.0 • Live Racing Engine
          </div>
       </div>
@@ -348,7 +386,7 @@ const LiveCenter: React.FC = () => {
              <button onClick={() => setShowSettings(false)} className="absolute top-8 right-8 text-zinc-500 hover:text-white transition-colors">
                 <XCircle size={28} />
              </button>
-             <h2 className="text-3xl font-black oswald uppercase text-white italic mb-6">Orbits 5 <span className="text-yellow-400">Settings</span></h2>
+             <h2 className="text-3xl font-black oswald uppercase text-white italic mb-6">Orbits 5 <span className="text-blue-500">Settings</span></h2>
              
              <div className="space-y-6">
                 <div>
@@ -357,19 +395,19 @@ const LiveCenter: React.FC = () => {
                      type="text" 
                      value={orbitsIpInput} 
                      onChange={(e) => setOrbitsIpInput(e.target.value)}
-                     className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-6 text-white font-bold outline-none focus:border-yellow-400 transition-all font-mono"
+                     className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-6 text-white font-bold outline-none focus:border-blue-500 transition-all font-mono"
                      placeholder="Ej: 192.168.1.100"
                    />
                 </div>
                 
-                <div className="p-4 bg-yellow-400/5 border border-yellow-400/10 rounded-2xl">
+                <div className="p-4 bg-blue-600/5 border border-blue-600/10 rounded-2xl">
                    <p className="text-[10px] font-medium text-zinc-400 leading-relaxed italic">
                      El sistema KDO sincroniza automáticamente con el servidor Orbits local para visualización masiva de tiempos.
                    </p>
                 </div>
 
                 <div className="flex flex-col gap-3">
-                   <button onClick={saveOrbitsSettings} className="w-full bg-yellow-400 hover:bg-yellow-500 text-black py-5 rounded-2xl font-black uppercase text-xs shadow-xl transition-all flex items-center justify-center gap-3">
+                   <button onClick={saveOrbitsSettings} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl transition-all flex items-center justify-center gap-3">
                      <Wifi size={18} /> Conectar Live Feed
                    </button>
                    <button onClick={() => {

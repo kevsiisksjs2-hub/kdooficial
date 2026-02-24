@@ -3,14 +3,15 @@ import React, { useState, useEffect } from 'react';
 import { Trophy, Activity, Zap, Shield, FileCheck, Calendar, FileDown, Search, AlertCircle, Clock, ChevronDown, ChevronUp, Sparkles, Loader2, Award, AlertTriangle, XCircle, Timer, MoveDown } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { aiService } from '../services/aiService';
-import { Pilot, Category, Status, RaceResult, Penalty, PenaltyType } from '../types';
-import { generateChampionshipPDF } from '../utils/pdfGenerator';
+import { Pilot, Category, Status, RaceResult, Penalty, PenaltyType, PublishedSession } from '../types';
+import { generateChampionshipPDF, generateLapByLapPDF } from '../utils/pdfGenerator';
 
 const Resultados: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category>('');
   const [pilots, setPilots] = useState<Pilot[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
+  const [publishedSessions, setPublishedSessions] = useState<PublishedSession[]>([]);
   const [view, setView] = useState<'ranking' | 'sesiones' | 'penalizaciones'>('ranking');
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -21,6 +22,7 @@ const Resultados: React.FC = () => {
     if (loadedCats.length > 0) setSelectedCategory(loadedCats[0]);
     setPilots(storageService.getPilots());
     setPenalties(storageService.getPenalties());
+    setPublishedSessions(storageService.getPublishedSessions());
     setAiInsight(null);
   }, []);
 
@@ -29,6 +31,12 @@ const Resultados: React.FC = () => {
     .sort((a, b) => (b.stats?.points || 0) - (a.stats?.points || 0));
 
   const filteredPenalties = penalties.filter(p => selectedCategory === 'Todas' || p.category === selectedCategory);
+  
+  // Filter sessions by selected category (or show all if 'Todas', but usually results are per category specific view)
+  // For 'Todas', we might just show recent. For specific, filter.
+  const filteredSessions = selectedCategory === 'Todas' 
+    ? publishedSessions 
+    : publishedSessions.filter(s => s.category === selectedCategory);
 
   const generateAiInsight = async () => {
     if (rankingPilots.length === 0) return;
@@ -46,6 +54,14 @@ const Resultados: React.FC = () => {
 
   const handleExport = () => {
     generateChampionshipPDF("Campeonato 2026", selectedCategory, rankingPilots);
+  };
+
+  const handleDownloadLapByLap = () => {
+    if (rankingPilots.length === 0) {
+        alert("No hay pilotos disponibles para generar el reporte.");
+        return;
+    }
+    generateLapByLapPDF(selectedCategory, rankingPilots, "RESULTADOS OFICIALES");
   };
 
   const getPenaltyStyle = (type: PenaltyType) => {
@@ -73,17 +89,20 @@ const Resultados: React.FC = () => {
                  <h1 className="text-6xl font-black italic oswald uppercase text-white mb-4">Resultados <span className="text-blue-500">Oficiales</span></h1>
                  <div className="flex flex-wrap gap-4 mt-8">
                     <button onClick={() => setView('ranking')} className={`px-8 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${view === 'ranking' ? 'bg-blue-600 text-white shadow-xl' : 'bg-zinc-900 hover:text-white'}`}>Ranking Temporada</button>
-                    <button onClick={() => setView('sesiones')} className={`px-8 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${view === 'sesiones' ? 'bg-blue-600 text-white shadow-xl' : 'bg-zinc-900 hover:text-white'}`}>Última Sesión</button>
+                    <button onClick={() => setView('sesiones')} className={`px-8 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${view === 'sesiones' ? 'bg-blue-600 text-white shadow-xl' : 'bg-zinc-900 hover:text-white'}`}>Últimas Sesiones</button>
                     <button onClick={() => setView('penalizaciones')} className={`px-8 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${view === 'penalizaciones' ? 'bg-red-600 text-white shadow-xl' : 'bg-zinc-900 hover:text-white'}`}>Penalizaciones</button>
                  </div>
               </div>
 
-              <div className="flex gap-4 items-center w-full lg:w-auto">
+              <div className="flex gap-4 items-center w-full lg:w-auto flex-wrap">
                  <select value={selectedCategory} onChange={(e) => {setSelectedCategory(e.target.value); setAiInsight(null);}} className="bg-zinc-900 border border-white/5 rounded-2xl py-5 px-10 text-[11px] font-black text-white uppercase outline-none focus:border-blue-600 appearance-none cursor-pointer flex-grow lg:flex-none">
                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                  </select>
-                 <button onClick={handleExport} className="bg-white text-black p-5 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-xl">
+                 <button onClick={handleExport} title="Exportar Ranking" className="bg-white text-black p-5 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-xl">
                     <FileDown size={20} />
+                 </button>
+                 <button onClick={handleDownloadLapByLap} title="Reporte Vuelta a Vuelta" className="bg-zinc-900 text-white border border-white/10 p-5 rounded-2xl hover:bg-white hover:text-black transition-all shadow-xl">
+                    <Timer size={20} />
                  </button>
                  <button onClick={generateAiInsight} disabled={isAnalyzing} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-5 rounded-2xl font-black uppercase text-[10px] flex items-center gap-2 transition-all disabled:opacity-50">
                     {isAnalyzing ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
@@ -131,10 +150,71 @@ const Resultados: React.FC = () => {
         )}
 
         {view === 'sesiones' && (
-          <div className="py-20 text-center glass-panel rounded-[3rem]">
-             <Activity size={48} className="text-blue-500 mx-auto mb-6 animate-pulse" />
-             <h3 className="text-xl font-black oswald text-white uppercase mb-2">Sin Sesiones Recientes</h3>
-             <p className="text-zinc-600 text-xs font-black uppercase tracking-widest">Los resultados de la última carrera aparecerán aquí tras la validación del comisariado.</p>
+          <div className="space-y-8 animate-in fade-in">
+             {filteredSessions.length > 0 ? (
+                filteredSessions.map(session => (
+                    <div key={session.id} className="bg-zinc-900 border border-white/5 rounded-[3rem] overflow-hidden shadow-2xl relative">
+                        <div className="bg-black p-8 px-10 border-b border-white/5 flex justify-between items-center">
+                            <div>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Activity className="text-emerald-500" size={18} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Sesión Finalizada</span>
+                                </div>
+                                <h3 className="text-2xl font-black oswald uppercase text-white italic">{session.eventName} - {session.category}</h3>
+                                <p className="text-[9px] font-bold text-zinc-500 uppercase mt-1">{session.date}</p>
+                            </div>
+                            {session.aiSummary && (
+                                <div className="hidden md:block max-w-sm text-right">
+                                    <p className="text-zinc-400 text-xs italic">"{session.aiSummary}"</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-zinc-950 text-zinc-600 text-[8px] font-black uppercase">
+                                    <tr>
+                                        <th className="px-10 py-4">Pos</th>
+                                        <th className="px-10 py-4">Piloto</th>
+                                        <th className="px-10 py-4">Kart</th>
+                                        <th className="px-10 py-4 text-center">Tiempo Total</th>
+                                        <th className="px-10 py-4 text-center">Mejor Vta</th>
+                                        <th className="px-10 py-4 text-right">Sanciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {session.results.map((res) => (
+                                        <tr key={res.pilotId} className={`hover:bg-white/5 transition-colors ${res.penalty ? 'bg-red-600/5' : ''}`}>
+                                            <td className="px-10 py-5">
+                                                <span className={`text-xl font-black oswald ${res.position === 1 ? 'text-yellow-400' : res.position <= 3 ? 'text-zinc-300' : 'text-zinc-600'}`}>{res.position}</span>
+                                            </td>
+                                            <td className="px-10 py-5 font-bold text-white text-xs uppercase">{res.pilotName}</td>
+                                            <td className="px-10 py-5 font-black oswald text-blue-500">#{res.number}</td>
+                                            <td className="px-10 py-5 text-center text-xs font-mono text-zinc-300">{res.totalTime}</td>
+                                            <td className="px-10 py-5 text-center text-xs font-mono text-zinc-400">{res.bestLap}</td>
+                                            <td className="px-10 py-5 text-right">
+                                                {res.penalty ? (
+                                                    <div className="inline-flex flex-col items-end">
+                                                        <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded uppercase">{res.penalty.type}</span>
+                                                        <span className="text-[8px] font-bold text-red-400 uppercase mt-1">{res.penalty.reason}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-emerald-500 text-[10px] font-black uppercase">Clean</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ))
+             ) : (
+                <div className="py-20 text-center glass-panel rounded-[3rem]">
+                    <Activity size={48} className="text-zinc-800 mx-auto mb-6 opacity-20" />
+                    <h3 className="text-xl font-black oswald text-white uppercase mb-2">Sin Sesiones Publicadas</h3>
+                    <p className="text-zinc-600 text-xs font-black uppercase tracking-widest">Los resultados de la última carrera aparecerán aquí tras la validación en Cronomax.</p>
+                </div>
+             )}
           </div>
         )}
 

@@ -181,5 +181,20 @@ export const aiService = {
     } catch (e) {
       return "Búsqueda inteligente desactivada en modo offline.";
     }
+  },
+
+  async processRaceDataForPublishing(category: string, rawResults: any[]) {
+    if (!navigator.onLine) return "Resultados procesados sin resumen IA (Modo Offline).";
+    try {
+        return await retryOperation(async () => {
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: `Generate a very short, professional race summary (max 1 sentence) for category ${category} based on these results: ${JSON.stringify(rawResults)}. E.g. "Juan Acosta dominates in wet conditions."`,
+            });
+            return response.text;
+        });
+    } catch (e) {
+        return "Resultados procesados automáticamente.";
+    }
   }
 };

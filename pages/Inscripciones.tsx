@@ -156,23 +156,58 @@ const Inscripciones: React.FC = () => {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) newErrors.name = "El nombre es obligatorio.";
-    if (!formData.number.trim()) newErrors.number = "El dorsal es obligatorio.";
+    
+    // Validate Name
+    if (!formData.name.trim()) {
+      newErrors.name = "El nombre es obligatorio.";
+    } else if (formData.name.length < 3) {
+      newErrors.name = "El nombre es demasiado corto.";
+    }
+
+    // Validate Number (Numeric check)
+    if (!formData.number.trim()) {
+      newErrors.number = "El dorsal es obligatorio.";
+    } else if (!/^\d+$/.test(formData.number.trim())) {
+      newErrors.number = "El dorsal debe ser numérico.";
+    }
+    
+    // Validate Ranking (Numeric check)
+    if (!formData.ranking) {
+      newErrors.ranking = "Ranking requerido.";
+    } else if (isNaN(Number(formData.ranking))) {
+      newErrors.ranking = "El ranking debe ser un número.";
+    }
+
+    // Validación Licencia Médica Única y Formato
     if (!formData.medicalLicense.trim()) {
         newErrors.medicalLicense = "Licencia Médica requerida.";
     } else {
-        // Chequear si la licencia pertenece a otra persona
-        const allPilots = storageService.getPilots();
-        const licenseOwner = allPilots.find(p => p.medicalLicense === formData.medicalLicense.trim());
-        
-        // Si existe un dueño de la licencia Y el nombre no coincide con el actual (ignorando espacios/mayúsculas)
-        // Permitimos si el nombre es el mismo (el piloto se inscribe en otra categoría)
-        if (licenseOwner && licenseOwner.name.toUpperCase().trim() !== formData.name.toUpperCase().trim()) {
-            newErrors.medicalLicense = `Licencia en uso por ${licenseOwner.name}`;
+        // Formato básico (ej: alfanumérico, al menos 4 caracteres)
+        if (formData.medicalLicense.trim().length < 3) {
+           newErrors.medicalLicense = "Formato de licencia inválido.";
+        } else {
+          const licenseToCheck = formData.medicalLicense.trim().toUpperCase();
+          const currentName = formData.name.trim().toUpperCase();
+          
+          // Buscar si la licencia existe en la base de datos completa
+          const allPilots = storageService.getPilots();
+          const existingPilotWithLicense = allPilots.find(p => p.medicalLicense && p.medicalLicense.toUpperCase() === licenseToCheck);
+
+          if (existingPilotWithLicense) {
+              // Si la licencia existe, el nombre DEBE coincidir
+              if (existingPilotWithLicense.name.toUpperCase() !== currentName) {
+                  newErrors.medicalLicense = `Licencia registrada a: ${existingPilotWithLicense.name}`;
+              }
+          }
         }
     }
 
-    if (!formData.sportsLicense.trim()) newErrors.sportsLicense = "Licencia Deportiva requerida.";
+    // Validate Sports License
+    if (!formData.sportsLicense.trim()) {
+      newErrors.sportsLicense = "Licencia Deportiva requerida.";
+    } else if (formData.sportsLicense.trim().length < 3) {
+      newErrors.sportsLicense = "Formato de licencia inválido.";
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -312,12 +347,15 @@ const Inscripciones: React.FC = () => {
                                     <div 
                                       key={`${s.id}-${idx}`} 
                                       onClick={() => populatePilotData(s)}
-                                      className="p-3 hover:bg-blue-600 hover:text-white cursor-pointer flex items-center justify-between text-xs font-bold uppercase text-zinc-300 transition-colors"
+                                      className="p-3 hover:bg-blue-600 hover:text-white cursor-pointer flex items-center justify-between text-xs font-bold uppercase text-zinc-300 transition-colors border-b border-zinc-800 last:border-0"
                                     >
-                                       <span className="flex items-center gap-2"><User size={12} /> {s.name}</span>
+                                       <span className="flex items-center gap-2">
+                                          <Sparkles size={10} className="text-blue-500" />
+                                          <span className="font-bold">{s.name}</span>
+                                       </span>
                                        <div className="flex items-center gap-2">
-                                          <span className="text-[8px] text-zinc-500">{s.category}</span>
-                                          <span className="text-[9px] bg-black/40 px-2 py-1 rounded">#{s.number}</span>
+                                          <span className="text-[8px] text-zinc-500 bg-black/40 px-2 py-1 rounded">{s.category}</span>
+                                          <span className="text-[9px] bg-blue-600/20 text-blue-500 px-2 py-1 rounded font-black">#{s.number}</span>
                                        </div>
                                     </div>
                                   ))}
@@ -337,6 +375,22 @@ const Inscripciones: React.FC = () => {
                             placeholder="00" 
                           />
                           {errors.number && <p className="text-red-500 text-[9px] font-bold uppercase mt-1 ml-2 flex items-center gap-1"><AlertCircle size={10} /> {errors.number}</p>}
+                        </div>
+
+                        {/* RANKING */}
+                        <div className="relative">
+                          <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-2 block ml-2">Ranking Actual</label>
+                          <input 
+                            type="number"
+                            value={formData.ranking}
+                            onChange={e => {
+                                setFormData({...formData, ranking: e.target.value});
+                                if (errors.ranking) setErrors(prev => ({...prev, ranking: ''}));
+                            }}
+                            className={`w-full bg-black border rounded-2xl px-6 py-4 text-white font-bold uppercase outline-none transition-all ${errors.ranking ? 'border-red-600 focus:border-red-600' : 'border-zinc-800 focus:border-blue-600'}`}
+                            placeholder="99"
+                          />
+                          {errors.ranking && <p className="text-red-500 text-[9px] font-bold uppercase mt-1 ml-2 flex items-center gap-1"><AlertCircle size={10} /> {errors.ranking}</p>}
                         </div>
 
                         {/* DATOS ADICIONALES (Se autocompletan) */}
